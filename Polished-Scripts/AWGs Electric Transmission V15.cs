@@ -1,6 +1,9 @@
 ﻿/*
  * AWG's Electrotransmission Script
  * -------------------------------------
+ * //V15 AWG
+ * //2022-11-24
+ * 
  * Read the comments carefully, you'll need them.
  * 
  * Q/E changes gears, but you can do this manually via toolbar to get more responsive and
@@ -22,9 +25,6 @@
  * painful naming, better support for remote controls.
  */
 
-//V15 AWG
-//2022-11-24
-
 const string Name_ControllerTag = "Driver"; //Driver Seat (currently only one seat at once)
 
 const string StatusPanel = "Status Panel"; //Gear display Panel
@@ -38,7 +38,7 @@ const string ForwardGearDefault = "3"; //What gear does accelerating put you in 
 const string ReverseGearDefault = "2"; //What gear does reversing put you in by default?    (Don't go above max)
 
 const string Name_ProgramTag = //Tag for the transmission script to find the engine controller if it exists
-"Engine Controller";            //MAKE SURE the tags line up in both scripts!
+"#EC";            //MAKE SURE the tags line up in both scripts!
 
 bool NeutralBraking = true; //When not actively driving forwards or backwards, brake?
 bool DefaultShifting = true; //Does the vehicle automatically switch to the below gears when going forward/back
