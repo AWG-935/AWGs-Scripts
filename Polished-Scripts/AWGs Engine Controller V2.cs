@@ -2,38 +2,31 @@
  * R e a d m e
  * -----------
  * 
+ * //V2.5 AWG
+ * //2022-11-24
+ * 
  * Tag your driver, don't worry about other blocks. This isn't properly polished yet but does everything it should.
  * Meant to work with my Electrotransmission script, otherwise will just advise you on speeds.
- * 
+ *  
  * This /does/ adapt to player inventory so PLEASE empty it of items you don't intend for in a vehicle.
  * 
  * Pay attention to the program output in the control panel, it will flash with your details occasionally,
- * or read custom data for your speed. Screen support will come later to give you engine status and so on.
+ * or read custom data for your speed. It includes screen support.
+ * 
  */
-
-//V1 AWG
-//2022-11-24
 
 const string Name_ControllerTag = //Include this in your controlling block to have it be used
 "Driver";
 
 
 const string Name_ProgramTag = //Tag for the transmission script to find and set the wheel speed with /this/ result instead.
-"Engine Controller";            //MAKE SURE the tags line up in both scripts!
+"#EC";            //MAKE SURE the tags line up in both scripts!
 
-const string Name_StatusPanel = //Doesn't do anything right now but if you want to get rid of the error, be my guest.
-"Status Panel";
+const string Name_StatusPanel =
+"Engine Panel";
 
-const string Arg_ClearCustomData = //This will start messing with calculations if used. Only debugging.
+const string Arg_ClearCustomData =
 "ClearCD";
-
-
-
-
-
-
-
-
 
 //Below are engine tags, only for debug outputs.
 const string Name_EngineLight =
@@ -113,7 +106,7 @@ bool GrabBlocks()//Check for power, then engine subtypes, return false if not. C
 }
 
 //---------------------------------//
-//  OPERATING COLOURS  // (Vestiges from the ammo checking program this was built out of)
+//  OPERATING COLOURS  //
 //---------------------------------//
 
 Color Colour_StatusLight_Operation = new Color
@@ -127,8 +120,7 @@ Color Colour_StatusLight_Loaded = new Color
 
 //---------------------//
 //Message examples
-const string Default_Message_LoadedTimerRun = "Load Timer Set\n";
-const string Default_Message_UnloadedTimerRun = "Unload Timer Set\n";
+string Result_SpeedDisplay;
 //
 //---------------------//
 
@@ -152,6 +144,7 @@ int Count_EngineSuperHeavy;
 int Count_EngineRadial;
 int Count_RunTimer = 0;
 
+float WeightReal_Grid;
 float Result_BaseSpeed;
 float Result_BoostSpeed;
 float Result_SpeedDifference;
@@ -244,6 +237,8 @@ public Program()
 
 public void Main(string argument, UpdateType updateSource)
 {
+    string ErrorLog = ""; //Add to this throughout the script using +=
+    string ScreenPrint = ""; //The eventual result on the screen. You can append to this if you want, but look at other programs for help.
 
     if (!isSetup)//If you aren't setup yet, run the grab blocks system, if true, allow program to continue
     {
@@ -292,7 +287,8 @@ public void Main(string argument, UpdateType updateSource)
 
         Function_EngineCounting();
 
-        Function_CalculateSpeed();
+        Function_CalculateSpeed(ref ScreenPrint);
+
     }
     //COUNTER OVER
     //----------------------------------------------------//
@@ -310,12 +306,6 @@ public void Main(string argument, UpdateType updateSource)
     //   ERROR HANDLING    \|/
     //----------------------------------------------------//
 
-
-    string ErrorLog = ""; //Add to this throughout the script using +=
-    string ScreenPrint = ""; //The eventual result on the screen. You can append to this if you want, but look at other programs for help.
-
-    string Dynamic_Message_LoadedTimerRun = Default_Message_LoadedTimerRun;
-    string Dynamic_Message_UnloadedTimerRun = Default_Message_UnloadedTimerRun;
     //The above are here so that if the timers are not, they can be set to blanks, and cut out.
 
     //----------------------------------------------------//
@@ -346,7 +336,7 @@ public void Main(string argument, UpdateType updateSource)
         Function_ClearEngineCD(List_RecognisedEngines);
     }
 
-    Function_EngineEchoPrinting();//tells me current engine status
+    Function_EngineEchoPrinting(ref ScreenPrint);//tells me current engine status
 
     Function_CompareEngineLists();//this is my check for power system modification
 
@@ -356,11 +346,11 @@ public void Main(string argument, UpdateType updateSource)
     }
 
 
-
+    Function_ScreenStatusConstruction(ref ScreenPrint, Result_SpeedDisplay);
 }
 
 
-public void Function_CalculateSpeed()
+public void Function_CalculateSpeed(ref string ScreenPrint)
 {
     ///Alright let's get this done gamers it's calculating time
             ///
@@ -368,7 +358,7 @@ public void Function_CalculateSpeed()
             ///
 
 
-    float WeightReal_Grid = Controller.CalculateShipMass().TotalMass;
+    WeightReal_Grid = Controller.CalculateShipMass().TotalMass;
     WeightReal_Grid = WeightReal_Grid / 1000f;
     WeightReal_Grid = (float)Math.Round(WeightReal_Grid, 1);
     Echo("\nWeight:"+WeightReal_Grid+"t");
@@ -436,32 +426,17 @@ public void Function_CalculateSpeed()
         }
 
     Result_Total = (float)Math.Round(Result_BaseSpeed+Result_SpeedDifference,1);
+
     if (Result_Total > Rule_SpeedLimit)
     {
         Result_Total = Rule_SpeedLimit;
     }
-    Me.CustomData = Result_Total.ToString();
-    Echo("Speed: "+Me.CustomData+" km/h");
 
-    //TODO
-    /// <summary>
-            /// Weight bracketing - figure that out and make it compact
-            ///
-            /// definition of the 'HMultiplier' float, 'MultiplierRuntime_Hydrogen'
-            /// definition of the 'SpeedMultiplier float, 'MultiplierRuntime_Speed'
-            ///
-            /// Addition of warnings for high weight.
-            ///
-            /// Result_BaseSpeed = 1/WeightReal_Grid*MultiplierRuntime_Speed;
-            /// Result_BoostSpeed = BaseSpeed * ((MultiplierRuntime_Hydrogen * Hydrogen_Multiplier)-HydrogenMultiplier+1);
-            /// Result_SpeedDifference = Math.Round(Result_TopSpeed-Result_BaseSpeed,0);
-            ///
-            /// if (Result_SpeedDifference > Rule_MaxHydroBoost)
-            ///     {
-            ///         Result_SpeedDifference = Rule_MaxHydroBoost;
-            ///     }
-            ///
-            /// </summary>
+    Me.CustomData = Result_Total.ToString();
+
+    Result_SpeedDisplay = ("Top Speed: " + Me.CustomData + " km/h");
+    Echo(Result_SpeedDisplay);
+
 }
 
 //New control method detector
@@ -504,7 +479,7 @@ public void Function_EngineCounting()
                 Count_EngineLight += 1;
             }
 
-            if (Engine.BlockDefinition.SubtypeId == "AWGMediumHydro")
+            if (Engine.BlockDefinition.SubtypeId == "AWGMediumHydro" || Engine.BlockDefinition.SubtypeId == "SmallHydrogenEngine")
             {
                 Count_EngineMedium += 1;
             }
@@ -568,6 +543,7 @@ public void Function_LoadEngineSubtypes()
 {
     List_EngineSubtypeIdToLookFor.Add("AWGSmallHydro");
     List_EngineSubtypeIdToLookFor.Add("AWGMediumHydro");
+    List_EngineSubtypeIdToLookFor.Add("SmallHydrogenEngine");
     List_EngineSubtypeIdToLookFor.Add("AWGHydroEngine");
     List_EngineSubtypeIdToLookFor.Add("AWGRadial");
     List_EngineSubtypeIdToLookFor.Add("AWGSHEngine");
@@ -582,7 +558,7 @@ public void Function_EngineCountReset()
     Count_EngineSuperHeavy = 0;
 }
 
-public void Function_EngineEchoPrinting()
+public void Function_EngineEchoPrinting(ref string ScreenPrint)
 {
     Echo(List_RecognisedEngines.Count.ToString() + " engines.\n");
 
@@ -607,6 +583,27 @@ public void Function_EngineEchoPrinting()
         +
         Linebreak
         );
+
+    ScreenPrint +=
+        Count_EngineLight.ToString() + Between + Name_EngineLight +
+
+        Linebreak
+        +
+        Count_EngineMedium.ToString() + Between + Name_EngineMedium +
+
+        Linebreak
+        +
+        Count_EngineHeavy.ToString() + Between + Name_EngineHeavy +
+
+        Linebreak
+        +
+        Count_EngineRadial.ToString() + Between + Name_EngineRadial +
+
+        Linebreak
+        +
+        Count_EngineSuperHeavy.ToString() + Between + Name_EngineSuperHeavy
+        +
+        Linebreak;
 }
 
 public void Function_ClearEngineCD(List<IMyPowerProducer> List_Engines)
@@ -634,6 +631,8 @@ public void Event_ErrorThrown(string ErrorLog, IMyTextPanel Block_StatusPanel, b
         if (Block_StatusPanel.ContentType == ContentType.NONE)
         {
             Block_StatusPanel.ContentType = ContentType.TEXT_AND_IMAGE;
+            Block_StatusPanel.Font = "Monospace";
+            Block_StatusPanel.FontSize = 1.2f;
         }
 
         Block_StatusPanel.WriteText(ErrorLog);
@@ -660,22 +659,21 @@ public void Function_CompileDisplayedErrorMessage(ref string ErrorLog, string Na
 
 }
 
-public void Function_ScreenStatusConstruction(ref string ScreenPrint, string Name_UsedBlock, string Message_Status)
+public void Function_ScreenStatusConstruction(ref string ScreenPrint, string Result_SpeedDisplay)
 {
     //make 'error block' string name?
 
-    ScreenPrint
-    +=
-    Name_UsedBlock //Rotor displacement
-    +
-    Linebreak
-    +
-    Message_Status //whether it is ready or unready
-    +
-    Linebreak
-    ;
-    //READY OR UNREADY
-    //HOW MUCH AMMO (?)
+        ScreenPrint
+        += Linebreak +
+        "Weight: " +
+        WeightReal_Grid+"t" +
+        Linebreak +
+        Result_SpeedDisplay +
+        Linebreak +
+        "Engines added "+Result_SpeedDifference+"km/h"
+
+
+        ;
 
     Event_ScreenOperation(ScreenPrint, Block_StatusPanel, HasStatusPanel);
 
@@ -686,6 +684,13 @@ public void Event_ScreenOperation(string ScreenPrint, IMyTextPanel Block_StatusP
 
     if (HasStatusPanel)
     {
+        if (Block_StatusPanel.ContentType == ContentType.NONE)
+        {
+            Block_StatusPanel.ContentType = ContentType.TEXT_AND_IMAGE;
+            Block_StatusPanel.Font = "Monospace";
+            Block_StatusPanel.FontSize = 1.2f;
+        }
+
         Block_StatusPanel.WriteText(ScreenPrint);
     }
 }
