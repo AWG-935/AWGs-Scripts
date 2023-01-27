@@ -2,9 +2,9 @@
  * R e a d m e
  * -----------
  * 
- * //V2.6 AWG
- * //2023-01-25
- * //-Added Modular Light Hydro Support (Counts as 2 Light Engines)
+ * //V2.7 AWG
+ * //2023-01-27
+ * //-Added base speed limiting, speed multipliers. More customisation for game modes. Way harder than imagined. Ughhhhh.
  * 
  * Tag your driver, don't worry about other blocks. This isn't properly polished yet but does everything it should.
  * Meant to work with my Electrotransmission script, otherwise will just advise you on speeds.
@@ -15,6 +15,41 @@
  * or read custom data for your speed. It includes screen support.
  * 
  */
+
+//FOR CUSTOM RULES, DO NOT CHANGE OTHERWISE
+
+const float Rule_SpeedMultiplier
+    = 1f;
+//An overall speed multiplier that affects all calculations.
+
+bool OnOff_SpeedLimit
+    = false;
+//Activates the code regarding speed limit and multiplier calculation!
+
+const float Rule_DesiredSpeedClamp
+    = 1;
+//This will limit your BASE speed, not hydrogen boosted speed. Adjust as necessary. 1 = off.
+
+const float Rule_SpeedLimit
+    = 130f;
+//km/h
+
+const float Rule_WeightLimit
+    = 100f;
+//Kind of obvious. Try not to break the scales.
+
+const float Rule_MaxHydroBoost
+    = 25f;
+//Clamp for max amount hydrogen can push you.
+
+const float Multiplier_Weight
+    = 1f;
+//Modify these for universal speed impacts, like weight's relation to speed
+
+const float Multiplier_Hydro
+    = 1f;
+//or the level of hydroboost you get!
+
 
 const string Name_ControllerTag = //Include this in your controlling block to have it be used
 "Driver";
@@ -44,9 +79,6 @@ const string Name_EngineSuperHeavy =
 
 const string Name_EngineRadial =
 "Radial Engine";
-
-
-
 
 
 
@@ -104,20 +136,7 @@ bool GrabBlocks()//Check for power, then engine subtypes, return false if not. C
     }
     Echo("Setup failed; no recognised engines.");
     return false;
-}
-
-//---------------------------------//
-//  OPERATING COLOURS  //
-//---------------------------------//
-
-Color Colour_StatusLight_Operation = new Color
-(230, 230, 190);                                            //Regular operation colours
-
-Color Colour_StatusLight_Empty = new Color
-(255, 25, 25);                                              //What it switches to when storage is empty
-
-Color Colour_StatusLight_Loaded = new Color
-(25, 255, 25);                                              //What it switches to when storage is filled, for a moment.
+}                                           //What it switches to when storage is filled, for a moment.
 
 //---------------------//
 //Message examples
@@ -138,7 +157,7 @@ bool ErrorThrownThisRun;
 //Debug Over
 
 
-int Count_EngineLight;
+float Count_EngineLight;
 int Count_EngineMedium;
 int Count_EngineHeavy;
 int Count_EngineSuperHeavy;
@@ -150,6 +169,7 @@ float Result_BaseSpeed;
 float Result_BoostSpeed;
 float Result_SpeedDifference;
 float Result_Total;
+float Limited_Result;
 
 string EngineRecognitionTag = "Registered";
 
@@ -167,30 +187,20 @@ const string Between = ": ";
 const string Blank = "";
 //---------------------//
 /// <summary>
-///
-/// Expected operation:
-///
-/// Detect light, medium, heavy, radial engines, and calculate speed + hydrogen boost from them.
-/// Output a speed variable. Send this to the transmission. Perhaps integrate the two?
-///
-/// Can make them interlocking in two ways, either Engine Heavy or Trans Heavy
-/// Engine Heavy: Where Engine/Speed calc controls wheel speed, and transmission 'advises' speed as just an outside
-/// variable rather than original, sent to Engine. Acts as true gear selector. May be worth building into Electrotransmission in this case.
-///
-/// Transmission Heavy: Where transmission controls wheel speed, Engine Controller acts as an advisor and continuously sends
-/// updates to it. Would need to plug in an input to the transmission to also take that.
+        ///
+        /// Expected operation:
+        ///
+        /// Detect light, medium, heavy, radial engines, and calculate speed + hydrogen boost from them.
+        /// Output a speed variable. Send this to the transmission. Perhaps integrate the two?
+        ///
+        /// Can make them interlocking in two ways, either Engine Heavy or Trans Heavy
+        /// Engine Heavy: Where Engine/Speed calc controls wheel speed, and transmission 'advises' speed as just an outside
+        /// variable rather than original, sent to Engine. Acts as true gear selector. May be worth building into Electrotransmission in this case.
+        ///
+        /// Transmission Heavy: Where transmission controls wheel speed, Engine Controller acts as an advisor and continuously sends
+        /// updates to it. Would need to plug in an input to the transmission to also take that.
 
 //DEFAULT SPEED SETUP, DO NOT MODIFY OUTSIDE OF YOUR OWN CUSTOM RULES//
-
-
-const float Rule_SpeedLimit = 130f; //
-
-const float Rule_WeightLimit = 100f;
-
-const float Rule_MaxHydroBoost = 25f;
-
-const float Multiplier_Weight = 1f;//Modify these for universal speed impacts, like weight's relation to speed
-const float Multiplier_Hydro = 1f;//or the level of hydroboost you get!
 
 const float EfficiencyMod_Light
                      = (0.69f * 1f) * Multiplier_Hydro;
@@ -232,12 +242,14 @@ public Program()
 
     Function_ClearEngineCD(List_PowerProducingBlocks);
     ///Firstly, for the global running pre-recompile, clear all engine custom data in case there are any.
-    ///Then add the given engine subtypes to the subtype list
+            ///Then add the given engine subtypes to the subtype list
     Function_LoadEngineSubtypes();
 }
-
+float LimitedSpeed = 0f;
 public void Main(string argument, UpdateType updateSource)
 {
+    //Gets the amount needed to divide the top speed by, as to obtain the wanted limited speed.
+
     string ErrorLog = ""; //Add to this throughout the script using +=
     string ScreenPrint = ""; //The eventual result on the screen. You can append to this if you want, but look at other programs for help.
 
@@ -252,7 +264,7 @@ public void Main(string argument, UpdateType updateSource)
 
     //COUNTER that refreshes the power list to check for added/removed engines
     Count_RunTimer += 1;
-    Echo("\nEngine Refresh: " + (Count_RunTimer * 20f + "%\n"));
+    Echo("\nEngine Refresh: "+(Count_RunTimer*20f+"%\n"));
 
     if (Count_RunTimer == 4)
     {
@@ -268,7 +280,7 @@ public void Main(string argument, UpdateType updateSource)
         {
             foreach (var RecognisedSubtypeIdBlock in List_EngineSubtypeIdToLookFor)//trying to make sure there are no duplicates.
             {
-                if (PowerProducer.BlockDefinition.SubtypeId.Contains(RecognisedSubtypeIdBlock) && !PowerProducer.CustomData.Contains(EngineRecognitionTag))//, then if the block contains a given subtype, and the checked block has NOT already been recognised
+                if (PowerProducer.BlockDefinition.SubtypeId.Contains(RecognisedSubtypeIdBlock) && !PowerProducer.CustomData.Contains(EngineRecognitionTag) && PowerProducer.IsWorking == true)//, then if the block contains a given subtype, and the checked block has NOT already been recognised
                 {
                     List_RecognisedEngines.Add(PowerProducer);//Confirmed engine
                     PowerProducer.CustomData = (EngineRecognitionTag);//tag it to make sure
@@ -288,7 +300,7 @@ public void Main(string argument, UpdateType updateSource)
 
         Function_EngineCounting();
 
-        Function_CalculateSpeed(ref ScreenPrint);
+        Function_CalculateSpeed(ref ScreenPrint, LimitedSpeed);
 
     }
     //COUNTER OVER
@@ -351,26 +363,26 @@ public void Main(string argument, UpdateType updateSource)
 }
 
 
-public void Function_CalculateSpeed(ref string ScreenPrint)
+public void Function_CalculateSpeed(ref string ScreenPrint, float LimitedSpeed)
 {
     ///Alright let's get this done gamers it's calculating time
-    ///
-    /// Hydrogen Efficiency Modifier
-    ///
+            ///
+            /// Hydrogen Efficiency Modifier
+            ///
 
 
     WeightReal_Grid = Controller.CalculateShipMass().TotalMass;
     WeightReal_Grid = WeightReal_Grid / 1000f;
     WeightReal_Grid = (float)Math.Round(WeightReal_Grid, 1);
-    Echo("\nWeight:" + WeightReal_Grid + "t");
+    Echo("\nWeight:"+WeightReal_Grid+"t");
 
     //Multiplying the individual hydrogen count by its efficiency multiplier, then adding.
     float Hydrogen_Multiplier =
-        (Count_EngineLight * EfficiencyMod_Light) +
-        (Count_EngineMedium * EfficiencyMod_Medium) +
-        (Count_EngineHeavy * EfficiencyMod_Heavy) +
-        (Count_EngineRadial * EfficiencyMod_Heavy) +
-        (Count_EngineSuperHeavy * EfficiencyMod_SuperHeavy) / Hydrogen_DivisionLevel;
+        (Count_EngineLight      * EfficiencyMod_Light)    +
+        (Count_EngineMedium     * EfficiencyMod_Medium)   +
+        (Count_EngineHeavy      * EfficiencyMod_Heavy)    +
+        (Count_EngineRadial     * EfficiencyMod_Heavy)    +
+        (Count_EngineSuperHeavy * EfficiencyMod_SuperHeavy)/Hydrogen_DivisionLevel;
 
     if (WeightReal_Grid < 10)//9.99t range
     {
@@ -417,20 +429,54 @@ public void Function_CalculateSpeed(ref string ScreenPrint)
         Echo("Over weight limit by " + (WeightReal_Grid - Rule_WeightLimit) + "t");
     }
 
-    Result_BaseSpeed = 1 / WeightReal_Grid * MultiplierRuntime_Speed;
-    Result_BoostSpeed = Result_BaseSpeed * ((MultiplierRuntime_Hydrogen * Hydrogen_Multiplier) - Hydrogen_Multiplier + 1);
-    Result_SpeedDifference = (float)Math.Round(Result_BoostSpeed - Result_BaseSpeed, 0);
+    Result_BaseSpeed = 1/WeightReal_Grid*MultiplierRuntime_Speed;
 
-    if (Result_SpeedDifference > Rule_MaxHydroBoost)
+
+
+    if (OnOff_SpeedLimit == true && Rule_DesiredSpeedClamp != 1)//Stops silly players forgetting to modify their programs
     {
-        Result_SpeedDifference = Rule_MaxHydroBoost;
+        LimitedSpeed = Result_BaseSpeed / Rule_DesiredSpeedClamp;
+        Limited_Result = Result_BaseSpeed * Rule_SpeedMultiplier / LimitedSpeed;
+
+        Result_BoostSpeed = Limited_Result * ((MultiplierRuntime_Hydrogen * Hydrogen_Multiplier) - Hydrogen_Multiplier + 1);
+        Result_SpeedDifference = (float)Math.Round(Result_BoostSpeed - Limited_Result, 0);
+    }
+    else
+    {
+        Result_BoostSpeed = Result_BaseSpeed * ((MultiplierRuntime_Hydrogen * Hydrogen_Multiplier) - Hydrogen_Multiplier + 1);
+        Result_SpeedDifference = (float)Math.Round(Result_BoostSpeed - Result_BaseSpeed, 0);
     }
 
-    Result_Total = (float)Math.Round(Result_BaseSpeed + Result_SpeedDifference, 1);
+
+    if (Result_SpeedDifference > Rule_MaxHydroBoost)
+        {
+            Result_SpeedDifference = Rule_MaxHydroBoost;
+        }
+
+    Result_Total = ((float)Math.Round(Result_BaseSpeed + Result_SpeedDifference, 1));
+
+
+
+    //if (OnOff_SpeedLimit == true && Rule_DesiredSpeedClamp != 1)//Stops silly players forgetting to modify their programs
+    //{
+    //    if (Limited_Result <= Result_Total)//NO CHEATING YA NASTY BUGGERS
+    //    {
+    //        Result_Total = Limited_Result;
+    //    }
+    //}
+    if (OnOff_SpeedLimit == true && Rule_DesiredSpeedClamp == 1)
+    {
+        Echo("\nChange your speed limiting, honey!\nSetting to default calc result.");
+        Result_Total = Result_Total * Rule_SpeedMultiplier;
+    }
+    else
+    {
+        Result_Total = Result_Total * Rule_SpeedMultiplier;
+    }
 
     if (Result_Total > Rule_SpeedLimit)
     {
-        Result_Total = Rule_SpeedLimit;
+        Result_Total = Rule_SpeedLimit * Rule_SpeedMultiplier;
     }
 
     Me.CustomData = Result_Total.ToString();
@@ -471,7 +517,7 @@ public void Function_EngineCounting()
     {
         if (Engine.IsFunctional != true || Engine.IsWorking != true)//check if they are non functional or not power producing
         {
-            Echo((Engine.DisplayNameText) + " non-functional!\n");
+            Echo((Engine.DisplayNameText)+" non-functional!\n");
         }
         else//if they are, count.
         {
@@ -482,7 +528,7 @@ public void Function_EngineCounting()
 
             if (Engine.BlockDefinition.SubtypeId == "AWGModularHydro")
             {
-                Count_EngineLight += 2;
+                Count_EngineLight += 2f;
             }
 
             if (Engine.BlockDefinition.SubtypeId == "AWGMediumHydro" || Engine.BlockDefinition.SubtypeId == "SmallHydrogenEngine")
@@ -670,17 +716,17 @@ public void Function_ScreenStatusConstruction(ref string ScreenPrint, string Res
 {
     //make 'error block' string name?
 
-    ScreenPrint
-    += Linebreak +
-    "Weight: " +
-    WeightReal_Grid + "t" +
-    Linebreak +
-    Result_SpeedDisplay +
-    Linebreak +
-    "Engines added " + Result_SpeedDifference + "km/h"
+        ScreenPrint
+        += Linebreak +
+        "Weight: " +
+        WeightReal_Grid+"t" +
+        Linebreak +
+        Result_SpeedDisplay +
+        Linebreak +
+        "Engines added "+Result_SpeedDifference+"km/h"
 
 
-    ;
+        ;
 
     Event_ScreenOperation(ScreenPrint, Block_StatusPanel, HasStatusPanel);
 
