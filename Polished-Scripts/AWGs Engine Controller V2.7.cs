@@ -16,7 +16,7 @@
  * 
  */
 
-//FOR CUSTOM RULES, DO NOT CHANGE OTHERWISE
+
 
 const float Rule_SpeedMultiplier
     = 1f;
@@ -30,6 +30,7 @@ const float Rule_DesiredSpeedClamp
     = 1;
 //This will limit your BASE speed, not hydrogen boosted speed. Adjust as necessary. 1 = off.
 
+//FOR CUSTOM RULES, DO NOT CHANGE ANY MODIFIERS WITHOUT PERMISSION - GREAT FOR GAMEMODE TWEAKS!
 const float Rule_SpeedLimit
     = 130f;
 //km/h
@@ -38,6 +39,8 @@ const float Rule_WeightLimit
     = 100f;
 //Kind of obvious. Try not to break the scales.
 
+//Don't change this upwards without permission this is all for 'gamemode' purposes, but can be helpful for changing downwards.
+//----
 const float Rule_MaxHydroBoost
     = 25f;
 //Clamp for max amount hydrogen can push you.
@@ -436,7 +439,6 @@ public void Function_CalculateSpeed(ref string ScreenPrint, float LimitedSpeed)
     if (OnOff_SpeedLimit == true && Rule_DesiredSpeedClamp != 1)//Stops silly players forgetting to modify their programs
     {
         LimitedSpeed = Result_BaseSpeed / Rule_DesiredSpeedClamp;
-        Limited_Result = Result_BaseSpeed * Rule_SpeedMultiplier / LimitedSpeed;
 
         Result_BoostSpeed = Limited_Result * ((MultiplierRuntime_Hydrogen * Hydrogen_Multiplier) - Hydrogen_Multiplier + 1);
         Result_SpeedDifference = (float)Math.Round(Result_BoostSpeed - Limited_Result, 0);
@@ -457,13 +459,14 @@ public void Function_CalculateSpeed(ref string ScreenPrint, float LimitedSpeed)
 
 
 
-    //if (OnOff_SpeedLimit == true && Rule_DesiredSpeedClamp != 1)//Stops silly players forgetting to modify their programs
-    //{
-    //    if (Limited_Result <= Result_Total)//NO CHEATING YA NASTY BUGGERS
-    //    {
-    //        Result_Total = Limited_Result;
-    //    }
-    //}
+    if (OnOff_SpeedLimit == true && Rule_DesiredSpeedClamp != 1)//Stops silly players forgetting to modify their programs
+    {
+        if (Limited_Result <= Result_Total)//NO CHEATING YA NASTY BUGGERS
+        {
+            Limited_Result = Result_BaseSpeed * Rule_SpeedMultiplier / LimitedSpeed;
+            Result_Total = Limited_Result + Result_SpeedDifference;
+        }
+    }
     if (OnOff_SpeedLimit == true && Rule_DesiredSpeedClamp == 1)
     {
         Echo("\nChange your speed limiting, honey!\nSetting to default calc result.");
